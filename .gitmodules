@@ -1,0 +1,9 @@
+[submodule "Libraries/GLEW"]
+	path = Libraries/GLEW
+	url = https://github.com/nigels-com/glew.git
+[submodule "Libraries/GLFW"]
+	path = Libraries/GLFW
+	url = https://github.com/glfw/glfw.git
+[submodule "Libraries/glm"]
+	path = Libraries/glm
+	url = https://github.com/g-truc/glm.git

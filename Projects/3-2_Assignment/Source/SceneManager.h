@@ -1,0 +1,95 @@
+///////////////////////////////////////////////////////////////////////////////
+// SceneManager.h
+// ============
+// Manage the loading and rendering of 3D scenes
+//
+//  AUTHOR: Brian Battersby - SNHU Instructor / Computer Science
+//  Created for CS-330-Computational Graphics and Visualization, Nov. 1st, 2023
+///////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include "ShaderManager.h"
+#include "ShapeMeshes.h"
+
+#include <string>
+#include <vector>
+#include <glm/glm.hpp>
+
+// needed to update buffer to window size
+#include "GLFW/glfw3.h"
+
+/***********************************************************
+ *  SceneManager
+ *
+ *  This class contains the code for preparing and rendering
+ *  3D scenes, including the shader settings.
+ ***********************************************************/
+class SceneManager
+{
+public:
+    // constructor
+    SceneManager(ShaderManager* pShaderManager);
+    // destructor
+    ~SceneManager();
+
+    // properties for loaded texture access
+    struct TEXTURE_INFO
+    {
+        std::string tag;
+        uint32_t ID;
+    };
+
+    // properties for object materials
+    struct OBJECT_MATERIAL
+    {
+        float ambientStrength;
+        glm::vec3 ambientColor;
+        glm::vec3 diffuseColor;
+        glm::vec3 specularColor;
+        float shininess;
+        std::string tag;
+    };
+
+private:
+    // pointer to shader manager object
+    ShaderManager* m_pShaderManager;
+    // pointer to basic shapes object
+    ShapeMeshes* m_basicMeshes;
+    // total number of loaded textures
+    int m_loadedTextures;
+    // loaded textures info
+    TEXTURE_INFO m_textureIDs[16];
+    // defined object materials
+    std::vector<OBJECT_MATERIAL> m_objectMaterials;
+
+    // set the transformation values into the transform buffer
+    void SetTransformations(
+        glm::vec3 scaleXYZ,
+        float XrotationDegrees,
+        float YrotationDegrees,
+        float ZrotationDegrees,
+        glm::vec3 positionXYZ);
+
+    // set the color values into the shader
+    void SetShaderColor(
+        float redColorValue,
+        float greenColorValue,
+        float blueColorValue,
+        float alphaValue);
+
+    // set the projection matrix for the shader
+    void SetProjection(int width, int height);
+
+public:
+
+    /*** The following methods are for the students to customize ***/
+    // Prepare the scene (load meshes, textures, projection)
+    void PrepareScene(GLFWwindow* window);
+
+    // Render the scene
+    void RenderScene();
+
+    // Optional: call this on window resize to update projection dynamically
+    void UpdateProjection(GLFWwindow* window);
+};
