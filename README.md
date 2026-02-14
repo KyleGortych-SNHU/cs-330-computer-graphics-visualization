@@ -11,10 +11,10 @@ note to use for prefromance
 Deferred Shading + PBR + Normal Mapping + Shadow Mapping
 
 ## About
-This is an example of using CRUD python module to conect via authentication using the accuser user and insert a document to the animals collection.
+This is an example of using c++ and OpenGL to make scenes and show case the use of .
 
 ## Motivation
-To show the work done in CS 340 Client/Server Development SNHU.
+To show the work done in CS 330 computer graphics and visualization SNHU.
 
 ## Getting Started
 Setup is done via `git clone url`.
