@@ -38,16 +38,38 @@ Transitvie dependecies such as language are shown via tree level.
 #### External Libraries
 
 - git submodules
-    -GLFW
-    -GLEW
-    -glm
+    - GLFW
+    - GLEW
+    - glm
 
 - included source
     - glad
 
 ## Usage
 
-### Code Example
+### Code Examples
+
+#### 1-2_OpenGLSample
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
 
 #### 2-2_Assignment
 
@@ -71,6 +93,137 @@ Transitvie dependecies such as language are shown via tree level.
 
 </details>
 
+#### 3-2_Assignment
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
+
+#### 4-2_Assignment
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
+
+#### 5-2_Assignment
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
+
+#### 6-2_Assignment
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
+
+#### 7-1_Assignment
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
+
+#### 8-2_Assignment
+
+<details>
+<summary>Click to see</summary>
+
+```c++
+
+```
+
+</details>
+
+##### Screenshot
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="screenshots/assignment1/" width="100%" alt="img">
+</div>
+
+</details>
 
 ### Tests
 
