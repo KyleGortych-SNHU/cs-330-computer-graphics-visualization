@@ -77,6 +77,11 @@ private:
 
     void SetShaderColor(float r, float g, float b, float a);
 
+    void SetShaderEmissive(
+        float r, float g, float b,
+        float strength = 3.0f,
+        float alpha = 1.0f);
+
     void SetShaderCheckerboard(
         float tileCountU, float tileCountV,
         glm::vec3 color1 = glm::vec3(1.0f),
@@ -104,6 +109,7 @@ private:
         const char* aoPath,
         const char* heightPath = nullptr);
     void SetShaderPBR(const std::string& tag);
+    void SetShaderPBRTinted(const std::string& tag, const glm::vec3& tint);
     void SetupLighting();
 
     // Camera state

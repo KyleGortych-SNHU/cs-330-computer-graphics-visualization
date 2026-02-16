@@ -11,35 +11,54 @@
 
 #include "ShaderManager.h"
 #include "camera.h"
-
-// GLFW library
-#include "GLFW/glfw3.h" 
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 class ViewManager
 {
 public:
-	// constructor
-	ViewManager(
-		ShaderManager* pShaderManager);
-	// destructor
-	~ViewManager();
+    // constructor
+    ViewManager(ShaderManager* pShaderManager);
+    // destructor
+    ~ViewManager();
 
-	// mouse position callback for mouse interaction with the 3D scene
-	static void Mouse_Position_Callback(GLFWwindow* window, double xMousePos, double yMousePos);
+    // create the initial OpenGL display window
+    GLFWwindow* CreateDisplayWindow(const char* windowTitle);
+
+    // prepare the per-frame scene view and camera
+    void PrepareSceneView();
+
+    // handle GLFW callbacks
+    static void MousePositionCallback(GLFWwindow* window, double xpos, double ypos);
+    static void MouseScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+    static void WindowResizeCallback(GLFWwindow* window, int width, int height);
+
+    // toggle between perspective and orthographic views
+    void ToggleProjection(bool orthographic);
 
 private:
-	// pointer to shader manager object
-	ShaderManager* m_pShaderManager;
-	// active OpenGL display window
-	GLFWwindow* m_pWindow;
+    ShaderManager* m_pShaderManager; // pointer to shader manager
+    GLFWwindow* m_pWindow;           // active OpenGL window
+    Camera* m_pCamera;               // camera for 3D navigation
 
-	// process keyboard events for interaction with the 3D scene
-	void ProcessKeyboardEvents();
+    // timing
+    float mDeltaTime;
+    float mLastFrame;
 
-public:
-	// create the initial OpenGL display window
-	GLFWwindow* CreateDisplayWindow(const char* windowTitle);
-	
-	// prepare the conversion from 3D object display to 2D scene display
-	void PrepareSceneView();
+    // mouse tracking
+    float mLastX;
+    float mLastY;
+    bool mFirstMouse;
+
+    // process keyboard input
+    void ProcessKeyboardEvents();
+
+    // update shader matrices
+    void UpdateShaderMatrices();
+
+    // helper to retrieve ViewManager instance from GLFW window
+    static ViewManager* GetInstance(GLFWwindow* window);
+
+    // projection mode
+    bool mOrthographic;
 };

@@ -12,84 +12,65 @@
 #include "ShaderManager.h"
 #include "ShapeMeshes.h"
 
+#include <string>
 #include <vector>
+#include <map>
+#include <glm/glm.hpp>
 
 /***********************************************************
  *  SceneManager
- *
- *  This class contains the code for preparing and rendering
- *  3D scenes, including the shader settings.
  ***********************************************************/
 class SceneManager
 {
 public:
-	// constructor
-	SceneManager(ShaderManager *pShaderManager);
-	// destructor
-	~SceneManager();
+    SceneManager(ShaderManager *pShaderManager);
+    ~SceneManager();
 
-	// properties for loaded texture access
-	struct TEXTURE_INFO
-	{
-		std::string tag;
-		uint32_t ID;
-	};
+    // A set of GPU texture handles for one PBR material
+    struct PBR_TEXTURE_SET
+    {
+        GLuint albedoID    = 0;
+        GLuint normalID    = 0;
+        GLuint metallicID  = 0;
+        GLuint roughnessID = 0;
+        GLuint aoID        = 0;
+        GLuint heightID    = 0;
+    };
 
-	// properties for object materials
-	struct OBJECT_MATERIAL
-	{
-		float ambientStrength;
-		glm::vec3 ambientColor;
-		glm::vec3 diffuseColor;
-		glm::vec3 specularColor;
-		float shininess;
-		std::string tag;
-	};
+    void PrepareScene();
+    void RenderScene();
 
 private:
-	// pointer to shader manager object
-	ShaderManager* m_pShaderManager;
-	// pointer to basic shapes object
-	ShapeMeshes *m_basicMeshes;
-	// total number of loaded textures
-	int m_loadedTextures;
-	// loaded textures info
-	TEXTURE_INFO m_textureIDs[16];
-	// collection of defined materials
-	std::vector<OBJECT_MATERIAL> m_objectMaterials;
+    ShaderManager* m_pShaderManager;
+    ShapeMeshes*   m_basicMeshes;
 
-	// retrieve defined material by tag
-	bool FindMaterial(std::string tag, OBJECT_MATERIAL& material);
+    // Maps a tag name (e.g. "ground") to its loaded GPU textures
+    std::map<std::string, PBR_TEXTURE_SET> m_pbrTextures;
 
-	// set the transformation values 
-	// into the transform buffer
-	void SetTransformations(
-		glm::vec3 scaleXYZ,
-		float XrotationDegrees,
-		float YrotationDegrees,
-		float ZrotationDegrees,
-		glm::vec3 positionXYZ);
+    // --- Texture helpers ---
+    GLuint LoadSingleTexture(const char* filepath);
+    GLuint CreateDefaultTexture(unsigned char value);
+    bool   LoadPBRTextureSet(
+               const std::string& tag,
+               const char* albedoPath,
+               const char* normalPath,
+               const char* metallicPath,
+               const char* roughnessPath,
+               const char* aoPath,
+               const char* heightPath = nullptr);
 
-	// set the color values into the shader
-	void SetShaderColor(
-		float redColorValue,
-		float greenColorValue,
-		float blueColorValue,
-		float alphaValue);
+    // --- Shader helpers ---
+    void SetTransformations(
+             glm::vec3 scaleXYZ,
+             float XrotationDegrees,
+             float YrotationDegrees,
+             float ZrotationDegrees,
+             glm::vec3 positionXYZ);
 
-	// set the object material into the shader
-	void SetShaderMaterial(
-		std::string materialTag);
+    void SetShaderColor(float r, float g, float b, float a);
+    void BindPBRMaterial(const std::string& tag);
 
-public:
-
-	/*** The following methods are for the students to ***/
-	/*** customize for their own 3D scene              ***/
-	void PrepareScene();
-	void RenderScene();
-
-	// pre-set light sources for 3D scene
-	void SetupSceneLights();
-	// pre-define the object materials for lighting
-	void DefineObjectMaterials();
+    // --- Scene setup ---
+    void LoadSceneTextures();
+    void SetupSceneLights();
 };

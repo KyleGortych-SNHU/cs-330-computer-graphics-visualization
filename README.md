@@ -66,7 +66,7 @@ Transitvie dependecies such as language are shown via tree level.
 <summary>Click to see</summary>
 
 <div align="center">
-  <img src="screenshots/assignment1/" width="100%" alt="img">
+  <img src="screenshots/assignment1/Screenshot_20260107_190228.png" width="100%" alt="img">
 </div>
 
 </details>
@@ -88,7 +88,7 @@ Transitvie dependecies such as language are shown via tree level.
 <summary>Click to see</summary>
 
 <div align="center">
-  <img src="screenshots/assignment1/" width="100%" alt="img">
+  <img src="screenshots/assignment2/Screenshot_20260118_172814.png" width="100%" alt="img">
 </div>
 
 </details>
@@ -110,7 +110,7 @@ Transitvie dependecies such as language are shown via tree level.
 <summary>Click to see</summary>
 
 <div align="center">
-  <img src="screenshots/assignment1/" width="100%" alt="img">
+  <img src="screenshots/assignment3/Screenshot_20260125_234040.png" width="100%" alt="img">
 </div>
 
 </details>
@@ -170,13 +170,24 @@ Transitvie dependecies such as language are shown via tree level.
 
 </details>
 
-##### Screenshot
+##### Screenshot of Milestone
 
 <details>
 <summary>Click to see</summary>
 
 <div align="center">
-  <img src="screenshots/assignment1/" width="100%" alt="img">
+  <img src="./screenshots/assignment6/Screenshot_20260215_210533.png" width="100%" alt="img">
+</div>
+
+</details>
+
+##### Screenshot of Assignment 6
+
+<details>
+<summary>Click to see</summary>
+
+<div align="center">
+  <img src="./screenshots/assignment6/Screenshot_20260215_220330.png" width="100%" alt="img">
 </div>
 
 </details>

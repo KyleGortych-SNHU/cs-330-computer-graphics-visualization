@@ -10,433 +10,455 @@
 #include "SceneManager.h"
 
 #include <glm/gtx/transform.hpp>
+#include <iostream>
+
+// stb_image for loading texture files from disk
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 // declare the global variables
 namespace
 {
-	const char* g_ModelName = "model";
-	const char* g_ColorValueName = "objectColor";
-	const char* g_TextureValueName = "objectTexture";
-	const char* g_UseTextureName = "bUseTexture";
-	const char* g_UseLightingName = "bUseLighting";
+    const char* g_ModelName      = "model";
+    const char* g_ColorValueName = "objectColor";
 }
 
 /***********************************************************
  *  SceneManager()
- *
- *  The constructor for the class
  ***********************************************************/
-SceneManager::SceneManager(ShaderManager *pShaderManager)
+SceneManager::SceneManager(ShaderManager* pShaderManager)
 {
-	m_pShaderManager = pShaderManager;
-	m_basicMeshes = new ShapeMeshes();
+    m_pShaderManager = pShaderManager;
+    m_basicMeshes    = new ShapeMeshes();
 }
 
 /***********************************************************
  *  ~SceneManager()
- *
- *  The destructor for the class
  ***********************************************************/
 SceneManager::~SceneManager()
 {
-	// free up the allocated memory
-	m_pShaderManager = NULL;
-	if (NULL != m_basicMeshes)
-	{
-		delete m_basicMeshes;
-		m_basicMeshes = NULL;
-	}
-	// clear the collection of defined materials
-	m_objectMaterials.clear();
+    m_pShaderManager = NULL;
+    if (NULL != m_basicMeshes)
+    {
+        delete m_basicMeshes;
+        m_basicMeshes = NULL;
+    }
+
+    // Free GPU textures
+    for (auto& pair : m_pbrTextures)
+    {
+        PBR_TEXTURE_SET& s = pair.second;
+        GLuint ids[] = { s.albedoID, s.normalID, s.metallicID,
+                         s.roughnessID, s.aoID, s.heightID };
+        for (GLuint id : ids)
+        {
+            if (id != 0)
+                glDeleteTextures(1, &id);
+        }
+    }
+    m_pbrTextures.clear();
 }
 
+// ================================================================
+//  Texture Loading
+// ================================================================
+
 /***********************************************************
- *  FindMaterial()
+ *  LoadSingleTexture()
  *
- *  This method is used for getting a material from the previously
- *  defined materials list that is associated with the passed in tag.
+ *  Loads one image file into an OpenGL texture and returns
+ *  the GL handle.  Returns 0 on failure.
  ***********************************************************/
-bool SceneManager::FindMaterial(std::string tag, OBJECT_MATERIAL& material)
+GLuint SceneManager::LoadSingleTexture(const char* filepath)
 {
-	if (m_objectMaterials.size() == 0)
-	{
-		return(false);
-	}
+    int width, height, channels;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load(filepath, &width, &height, &channels, 0);
+    if (!data)
+    {
+        std::cerr << "WARNING: Could not load texture: " << filepath << std::endl;
+        return 0;
+    }
 
-	int index = 0;
-	bool bFound = false;
-	while ((index < m_objectMaterials.size()) && (bFound == false))
-	{
-		if (m_objectMaterials[index].tag.compare(tag) == 0)
-		{
-			bFound = true;
-			material.ambientColor = m_objectMaterials[index].ambientColor;
-			material.ambientStrength = m_objectMaterials[index].ambientStrength;
-			material.diffuseColor = m_objectMaterials[index].diffuseColor;
-			material.specularColor = m_objectMaterials[index].specularColor;
-			material.shininess = m_objectMaterials[index].shininess;
-		}
-		else
-		{
-			index++;
-		}
-	}
+    GLenum format = GL_RGB;
+    if (channels == 1) format = GL_RED;
+    else if (channels == 3) format = GL_RGB;
+    else if (channels == 4) format = GL_RGBA;
 
-	return(true);
+    GLuint texID;
+    glGenTextures(1, &texID);
+    glBindTexture(GL_TEXTURE_2D, texID);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0,
+                 format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
+    return texID;
 }
 
 /***********************************************************
- *  SetTransformation()
+ *  CreateDefaultTexture()
  *
- *  This method is used for setting the transform buffer
- *  using the passed in transformation values.
+ *  Creates a tiny 1×1 texture filled with the given value.
+ *  Useful as a fallback (e.g. white albedo, 0.5 roughness).
+ ***********************************************************/
+GLuint SceneManager::CreateDefaultTexture(unsigned char value)
+{
+    GLuint texID;
+    glGenTextures(1, &texID);
+    glBindTexture(GL_TEXTURE_2D, texID);
+
+    unsigned char pixel[] = { value, value, value, 255 };
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    return texID;
+}
+
+/***********************************************************
+ *  LoadPBRTextureSet()
+ *
+ *  Loads a full set of PBR textures for one material and
+ *  stores them in m_pbrTextures under the given tag.
+ *  Any path that is nullptr gets a sensible 1×1 default.
+ ***********************************************************/
+bool SceneManager::LoadPBRTextureSet(
+    const std::string& tag,
+    const char* albedoPath,
+    const char* normalPath,
+    const char* metallicPath,
+    const char* roughnessPath,
+    const char* aoPath,
+    const char* heightPath)
+{
+    PBR_TEXTURE_SET set;
+
+    // Albedo — default white
+    set.albedoID = albedoPath ? LoadSingleTexture(albedoPath) : 0;
+    if (set.albedoID == 0) set.albedoID = CreateDefaultTexture(255);
+
+    // Normal — default flat (128,128,255 → 0,0,1 in tangent space)
+    set.normalID = normalPath ? LoadSingleTexture(normalPath) : 0;
+    if (set.normalID == 0)
+    {
+        GLuint texID;
+        glGenTextures(1, &texID);
+        glBindTexture(GL_TEXTURE_2D, texID);
+        unsigned char flat[] = { 128, 128, 255, 255 };
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, flat);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        set.normalID = texID;
+    }
+
+    // Metallic — default 0 (non-metal)
+    set.metallicID = metallicPath ? LoadSingleTexture(metallicPath) : 0;
+    if (set.metallicID == 0) set.metallicID = CreateDefaultTexture(0);
+
+    // Roughness — default 128 (~0.5)
+    set.roughnessID = roughnessPath ? LoadSingleTexture(roughnessPath) : 0;
+    if (set.roughnessID == 0) set.roughnessID = CreateDefaultTexture(128);
+
+    // AO — default 255 (fully lit)
+    set.aoID = aoPath ? LoadSingleTexture(aoPath) : 0;
+    if (set.aoID == 0) set.aoID = CreateDefaultTexture(255);
+
+    // Height — default 128 (mid-level, no displacement)
+    set.heightID = heightPath ? LoadSingleTexture(heightPath) : 0;
+    if (set.heightID == 0) set.heightID = CreateDefaultTexture(128);
+
+    m_pbrTextures[tag] = set;
+
+    std::cout << "Loaded PBR set: " << tag << std::endl;
+    return true;
+}
+
+/***********************************************************
+ *  LoadSceneTextures()
+ *
+ *  Loads all PBR texture sets needed by the scene.
+ *  Paths are relative to the working directory (project root).
+ ***********************************************************/
+void SceneManager::LoadSceneTextures()
+{
+    // Base path to the shared textures folder
+    const std::string base = "../../Utilities/textures/";
+
+    // --- Ground plane: Plaster ---
+    {
+        std::string dir = base + "Plaster001_2K-PNG/";
+        LoadPBRTextureSet("ground",
+            (dir + "Plaster001_2K-PNG_Color.png").c_str(),
+            (dir + "Plaster001_2K-PNG_NormalGL.png").c_str(),
+            nullptr,   // no metalness map for plaster
+            (dir + "Plaster001_2K-PNG_Roughness.png").c_str(),
+            nullptr,   // no AO map
+            (dir + "Plaster001_2K-PNG_Displacement.png").c_str());
+    }
+
+    // --- Cylinder: Metal009 ---
+    {
+        std::string dir = base + "Metal009_2K-PNG/";
+        LoadPBRTextureSet("cylinder",
+            (dir + "Metal009_2K-PNG_Color.png").c_str(),
+            (dir + "Metal009_2K-PNG_NormalGL.png").c_str(),
+            (dir + "Metal009_2K-PNG_Metalness.png").c_str(),
+            (dir + "Metal009_2K-PNG_Roughness.png").c_str(),
+            nullptr,
+            (dir + "Metal009_2K-PNG_Displacement.png").c_str());
+    }
+
+    // --- Box1: Leather ---
+    {
+        std::string dir = base + "Leather036D_2K-PNG/";
+        LoadPBRTextureSet("box1",
+            (dir + "Leather036D_2K-PNG_Color.png").c_str(),
+            (dir + "Leather036D_2K-PNG_NormalGL.png").c_str(),
+            nullptr,   // leather is non-metallic
+            (dir + "Leather036D_2K-PNG_Roughness.png").c_str(),
+            (dir + "Leather036D_2K-PNG_AmbientOcclusion.png").c_str(),
+            (dir + "Leather036D_2K-PNG_Displacement.png").c_str());
+    }
+
+    // --- Box2: Rubber ---
+    {
+        std::string dir = base + "Rubber004_2K-PNG/";
+        LoadPBRTextureSet("box2",
+            (dir + "Rubber004_2K-PNG_Color.png").c_str(),
+            (dir + "Rubber004_2K-PNG_NormalGL.png").c_str(),
+            nullptr,
+            (dir + "Rubber004_2K-PNG_Roughness.png").c_str(),
+            nullptr,
+            (dir + "Rubber004_2K-PNG_Displacement.png").c_str());
+    }
+
+    // --- Sphere: Metal052A ---
+    {
+        std::string dir = base + "Metal052A_2K-PNG/";
+        LoadPBRTextureSet("sphere",
+            (dir + "Metal052A_2K-PNG_Color.png").c_str(),
+            (dir + "Metal052A_2K-PNG_NormalGL.png").c_str(),
+            (dir + "Metal052A_2K-PNG_Metalness.png").c_str(),
+            (dir + "Metal052A_2K-PNG_Roughness.png").c_str(),
+            nullptr,
+            (dir + "Metal052A_2K-PNG_Displacement.png").c_str());
+    }
+
+    // --- Cone: Plastic ---
+    {
+        std::string dir = base + "Plastic016A_2K-PNG/";
+        LoadPBRTextureSet("cone",
+            (dir + "Plastic016A_2K-PNG_Color.png").c_str(),
+            (dir + "Plastic016A_2K-PNG_NormalGL.png").c_str(),
+            nullptr,
+            (dir + "Plastic016A_2K-PNG_Roughness.png").c_str(),
+            nullptr,
+            (dir + "Plastic016A_2K-PNG_Displacement.png").c_str());
+    }
+}
+
+// ================================================================
+//  Shader Helpers
+// ================================================================
+
+/***********************************************************
+ *  SetTransformations()
  ***********************************************************/
 void SceneManager::SetTransformations(
-	glm::vec3 scaleXYZ,
-	float XrotationDegrees,
-	float YrotationDegrees,
-	float ZrotationDegrees,
-	glm::vec3 positionXYZ)
+    glm::vec3 scaleXYZ,
+    float XrotationDegrees,
+    float YrotationDegrees,
+    float ZrotationDegrees,
+    glm::vec3 positionXYZ)
 {
-	// variables for this method
-	glm::mat4 modelView;
-	glm::mat4 scale;
-	glm::mat4 rotationX;
-	glm::mat4 rotationY;
-	glm::mat4 rotationZ;
-	glm::mat4 translation;
+    glm::mat4 scale     = glm::scale(scaleXYZ);
+    glm::mat4 rotationX = glm::rotate(glm::radians(XrotationDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
+    glm::mat4 rotationY = glm::rotate(glm::radians(YrotationDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 rotationZ = glm::rotate(glm::radians(ZrotationDegrees), glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 translation = glm::translate(positionXYZ);
 
-	// set the scale value in the transform buffer
-	scale = glm::scale(scaleXYZ);
-	// set the rotation values in the transform buffer
-	rotationX = glm::rotate(glm::radians(XrotationDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
-	rotationY = glm::rotate(glm::radians(YrotationDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
-	rotationZ = glm::rotate(glm::radians(ZrotationDegrees), glm::vec3(0.0f, 0.0f, 1.0f));
-	// set the translation value in the transform buffer
-	translation = glm::translate(positionXYZ);
+    glm::mat4 modelView = translation * rotationX * rotationY * rotationZ * scale;
 
-	// matrix math is used to calculate the final model matrix
-	modelView = translation * rotationX * rotationY * rotationZ * scale;
-	if (NULL != m_pShaderManager)
-	{
-		// pass the model matrix into the shader
-		m_pShaderManager->setMat4Value(g_ModelName, modelView);
-	}
+    if (m_pShaderManager)
+    {
+        m_pShaderManager->setMat4Value(g_ModelName, modelView);
+    }
 }
 
 /***********************************************************
  *  SetShaderColor()
- *
- *  This method is used for setting the passed in color
- *  into the shader for the next draw command
  ***********************************************************/
-void SceneManager::SetShaderColor(
-	float redColorValue,
-	float greenColorValue,
-	float blueColorValue,
-	float alphaValue)
+void SceneManager::SetShaderColor(float r, float g, float b, float a)
 {
-	// variables for this method
-	glm::vec4 currentColor;
-
-	currentColor.r = redColorValue;
-	currentColor.g = greenColorValue;
-	currentColor.b = blueColorValue;
-	currentColor.a = alphaValue;
-
-	if (NULL != m_pShaderManager)
-	{
-		// pass the color values into the shader
-		m_pShaderManager->setVec4Value(g_ColorValueName, currentColor);
-	}
+    if (m_pShaderManager)
+    {
+        m_pShaderManager->setVec4Value(g_ColorValueName, glm::vec4(r, g, b, a));
+    }
 }
 
 /***********************************************************
- *  SetShaderMaterial()
+ *  BindPBRMaterial()
  *
- *  This method is used for passing the material values
- *  into the shader.
+ *  Activates PBR mode in the shader and binds the texture
+ *  set associated with the given tag to texture units 0–5.
  ***********************************************************/
-void SceneManager::SetShaderMaterial(
-	std::string materialTag)
+void SceneManager::BindPBRMaterial(const std::string& tag)
 {
-	if (m_objectMaterials.size() > 0)
-	{
-		OBJECT_MATERIAL material;
-		bool bReturn = false;
+    if (!m_pShaderManager) return;
 
-		// find the defined material that matches the tag
-		bReturn = FindMaterial(materialTag, material);
-		if (bReturn == true)
-		{
-			// pass the material properties into the shader
-			m_pShaderManager->setVec3Value("material.ambientColor", material.ambientColor);
-			m_pShaderManager->setFloatValue("material.ambientStrength", material.ambientStrength);
-			m_pShaderManager->setVec3Value("material.diffuseColor", material.diffuseColor);
-			m_pShaderManager->setVec3Value("material.specularColor", material.specularColor);
-			m_pShaderManager->setFloatValue("material.shininess", material.shininess);
-		}
-	}
+    auto it = m_pbrTextures.find(tag);
+    if (it == m_pbrTextures.end())
+    {
+        // Fallback: use flat color, disable PBR
+        m_pShaderManager->setBoolValue("bUsePBR", false);
+        m_pShaderManager->setBoolValue("bUseTexture", false);
+        SetShaderColor(0.8f, 0.8f, 0.8f, 1.0f);
+        return;
+    }
+
+    const PBR_TEXTURE_SET& s = it->second;
+
+    // Enable PBR path in the fragment shader
+    m_pShaderManager->setBoolValue("bUsePBR", true);
+    m_pShaderManager->setBoolValue("bUseTexture", false);
+    m_pShaderManager->setBoolValue("bIsEmissive", false);
+    m_pShaderManager->setBoolValue("bUseCheckerboard", false);
+
+    // Bind each texture to the expected texture unit
+    // (matches fragment shader: albedoMap=0, normalMap=1, metallicMap=2,
+    //  roughnessMap=3, aoMap=4, heightMap=5)
+    m_pShaderManager->setPBRTextures(
+        s.albedoID,
+        s.normalID,
+        s.metallicID,
+        s.roughnessID,
+        s.aoID,
+        s.heightID);
+
+    // Default UV scale and tint
+    m_pShaderManager->setVec2Value("UVscale", glm::vec2(1.0f, 1.0f));
+    m_pShaderManager->setVec3Value("pbrTint", glm::vec3(1.0f));
 }
 
-/**************************************************************/
-/*** STUDENTS CAN MODIFY the code in the methods BELOW for  ***/
-/*** preparing and rendering their own 3D replicated scenes.***/
-/*** Please refer to the code in the OpenGL sample project  ***/
-/*** for assistance.                                        ***/
-/**************************************************************/
-
- /***********************************************************
-  *  DefineObjectMaterials()
-  *
-  *  This method is used for configuring the various material
-  *  settings for all of the objects within the 3D scene.
-  ***********************************************************/
-void SceneManager::DefineObjectMaterials()
-{
-	/*** STUDENTS - add the code BELOW for defining object materials. ***/
-	/*** There is no limit to the number of object materials that can ***/
-	/*** be defined. Refer to the code in the OpenGL Sample for help  ***/
-
-	
-
-}
+// ================================================================
+//  Scene Setup
+// ================================================================
 
 /***********************************************************
  *  SetupSceneLights()
  *
- *  This method is called to add and configure the light
- *  sources for the 3D scene.  There are up to 4 light sources.
+ *  Configures point lights using the uniform arrays that
+ *  the fragment shader actually expects.
  ***********************************************************/
 void SceneManager::SetupSceneLights()
 {
-	// this line of code is NEEDED for telling the shaders to render 
-	// the 3D scene with custom lighting, if no light sources have
-	// been added then the display window will be black - to use the 
-	// default OpenGL lighting then comment out the following line
-	//m_pShaderManager->setBoolValue(g_UseLightingName, true);
+    if (!m_pShaderManager) return;
 
-	/*** STUDENTS - add the code BELOW for setting up light sources ***/
-	/*** Up to four light sources can be defined. Refer to the code ***/
-	/*** in the OpenGL Sample for help                              ***/
+    // Two point lights with distinct colors — the shader accumulates
+    // both contributions per fragment, so surfaces between the lights
+    // receive a natural blend of both colors.
+    m_pShaderManager->setIntValue("numLights", 2);
 
-	
+    // Light 0 — warm orange/amber, upper-right, close to the scene
+    m_pShaderManager->setVec3Value("lightPositions[0]", glm::vec3(4.0f, 5.0f, 4.0f));
+    m_pShaderManager->setVec3Value("lightColors[0]",    glm::vec3(1.0f, 0.6f, 0.2f));
+    m_pShaderManager->setFloatValue("lightIntensities[0]", 200.0f);
 
+    // Light 1 — cool blue/cyan, upper-left, close to the scene
+    m_pShaderManager->setVec3Value("lightPositions[1]", glm::vec3(-4.0f, 5.0f, 4.0f));
+    m_pShaderManager->setVec3Value("lightColors[1]",    glm::vec3(0.05f, 0.15f, 1.0f));
+    m_pShaderManager->setFloatValue("lightIntensities[1]", 200.0f);
 }
 
 /***********************************************************
  *  PrepareScene()
- *
- *  This method is used for preparing the 3D scene by loading
- *  the shapes, textures in memory to support the 3D scene 
- *  rendering
  ***********************************************************/
 void SceneManager::PrepareScene()
 {
-	// define the materials for objects in the scene
-	DefineObjectMaterials();
-	// add and define the light sources for the scene
-	SetupSceneLights();
+    // Load all PBR texture sets from disk into GPU memory
+    LoadSceneTextures();
 
-	// only one instance of a particular mesh needs to be
-	// loaded in memory no matter how many times it is drawn
-	// in the rendered 3D scene - the following code loads
-	// the basic 3D meshes into the graphics pipeline buffers
+    // Configure the lights
+    SetupSceneLights();
 
-	m_basicMeshes->LoadBoxMesh();
-	m_basicMeshes->LoadPlaneMesh();
-	m_basicMeshes->LoadCylinderMesh();
-	m_basicMeshes->LoadConeMesh();
-	m_basicMeshes->LoadSphereMesh();
+    // Load the mesh geometry into GPU buffers
+    m_basicMeshes->LoadBoxMesh();
+    m_basicMeshes->LoadPlaneMesh();
+    m_basicMeshes->LoadCylinderMesh();
+    m_basicMeshes->LoadConeMesh();
+    m_basicMeshes->LoadSphereMesh();
 }
+
+// ================================================================
+//  Rendering
+// ================================================================
 
 /***********************************************************
  *  RenderScene()
  *
- *  This method is used for rendering the 3D scene by 
- *  transforming and drawing the basic 3D shapes
+ *  Renders each object with its correct mesh, material, and
+ *  transformation.
  ***********************************************************/
 void SceneManager::RenderScene()
 {
-	// declare the variables for the transformations
-	glm::vec3 scaleXYZ;
-	float XrotationDegrees = 0.0f;
-	float YrotationDegrees = 0.0f;
-	float ZrotationDegrees = 0.0f;
-	glm::vec3 positionXYZ;
+    // --- Ground plane ---
+    SetTransformations(
+        glm::vec3(20.0f, 1.0f, 10.0f),
+        0.0f, 0.0f, 0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f));
+    BindPBRMaterial("ground");
+    m_pShaderManager->setVec2Value("UVscale", glm::vec2(4.0f, 4.0f));
+    m_basicMeshes->DrawPlaneMesh();
 
-	/*** Set needed transformations before drawing the basic mesh.  ***/
-	/*** This same ordering of code should be used for transforming ***/
-	/*** and drawing all the basic 3D shapes.						***/
-	/******************************************************************/
-	// set the XYZ scale for the mesh
-	scaleXYZ = glm::vec3(20.0f, 1.0f, 10.0f);
+    // --- Cylinder ---
+    SetTransformations(
+        glm::vec3(0.9f, 2.8f, 0.9f),
+        90.0f, 0.0f, -15.0f,
+        glm::vec3(0.0f, 0.9f, 0.4f));
+    BindPBRMaterial("cylinder");
+    m_basicMeshes->DrawCylinderMesh();
 
-	// set the XYZ rotation for the mesh
-	XrotationDegrees = 0.0f;
-	YrotationDegrees = 0.0f;
-	ZrotationDegrees = 0.0f;
+    // --- Box 1 ---
+    SetTransformations(
+        glm::vec3(1.0f, 9.0f, 1.3f),
+        0.0f, 0.0f, 95.0f,
+        glm::vec3(0.2f, 2.27f, 2.0f));
+    BindPBRMaterial("box1");
+    m_basicMeshes->DrawBoxMesh();
 
-	// set the XYZ position for the mesh
-	positionXYZ = glm::vec3(0.0f, 0.0f, 0.0f);
+    // --- Box 2 ---
+    SetTransformations(
+        glm::vec3(1.7f, 1.5f, 1.5f),
+        0.0f, 40.0f, 8.0f,
+        glm::vec3(3.3f, 3.85f, 2.19f));
+    BindPBRMaterial("box2");
+    m_basicMeshes->DrawBoxMesh();
 
-	// set the transformations into memory to be used on the drawn meshes
-	SetTransformations(
-		scaleXYZ,
-		XrotationDegrees,
-		YrotationDegrees,
-		ZrotationDegrees,
-		positionXYZ);
+    // --- Sphere ---
+    SetTransformations(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        0.0f, 0.0f, 0.0f,
+        glm::vec3(3.2f, 5.6f, 2.5f));
+    BindPBRMaterial("sphere");
+    m_basicMeshes->DrawSphereMesh();
 
-	// set the active color values in the shader (RGBA)
-	SetShaderColor(1, 1, 1, 1);
-
-	// draw the mesh with transformation values - this plane is used for the base
-	m_basicMeshes->DrawPlaneMesh();
-	/****************************************************************/
-
-	/*** Set needed transformations before drawing the basic mesh.  ***/
-	/*** This same ordering of code should be used for transforming ***/
-	/*** and drawing all the basic 3D shapes.						***/
-	/******************************************************************/
-	// set the XYZ scale for the mesh
-	scaleXYZ = glm::vec3(0.9f, 2.8f, 0.9f);
-
-	// set the XYZ rotation for the mesh
-	XrotationDegrees = 90.0f;
-	YrotationDegrees = 0.0f;
-	ZrotationDegrees = -15.0f;
-
-	// set the XYZ position for the mesh
-	positionXYZ = glm::vec3(0.0f, 0.9f, 0.4f);
-
-	// set the transformations into memory to be used on the drawn meshes
-	SetTransformations(
-		scaleXYZ,
-		XrotationDegrees,
-		YrotationDegrees,
-		ZrotationDegrees,
-		positionXYZ);
-
-	// set the active color values in the shader (RGBA)
-	SetShaderColor(1, 1, 1, 1);
-
-	m_basicMeshes->DrawCylinderMesh();
-	/****************************************************************/
-
-	/*** Set needed transformations before drawing the basic mesh.  ***/
-	/*** This same ordering of code should be used for transforming ***/
-	/*** and drawing all the basic 3D shapes.						***/
-	/******************************************************************/
-	// set the XYZ scale for the mesh
-	scaleXYZ = glm::vec3(1.0f, 9.0f, 1.3f);
-
-	// set the XYZ rotation for the mesh
-	XrotationDegrees = 0.0f;
-	YrotationDegrees = 0.0f;
-	ZrotationDegrees = 95.0f;
-
-	// set the XYZ position for the mesh
-	positionXYZ = glm::vec3(0.2f, 2.27f, 2.0f);
-
-	// set the transformations into memory to be used on the drawn meshes
-	SetTransformations(
-		scaleXYZ,
-		XrotationDegrees,
-		YrotationDegrees,
-		ZrotationDegrees,
-		positionXYZ);
-
-	// set the active color values in the shader (RGBA)
-	SetShaderColor(1, 1, 1, 1);
-
-	m_basicMeshes->DrawBoxMesh();
-	/****************************************************************/
-
-	/*** Set needed transformations before drawing the basic mesh.  ***/
-	/*** This same ordering of code should be used for transforming ***/
-	/*** and drawing all the basic 3D shapes.						***/
-	/******************************************************************/
-	// set the XYZ scale for the mesh
-	scaleXYZ = glm::vec3(1.7f, 1.5f, 1.5f);
-
-	// set the XYZ rotation for the mesh
-	XrotationDegrees = 0.0f;
-	YrotationDegrees = 40.0f;
-	ZrotationDegrees = 8.0f;
-
-	// set the XYZ position for the mesh
-	positionXYZ = glm::vec3(3.3f, 3.85f, 2.19f);
-
-	// set the transformations into memory to be used on the drawn meshes
-	SetTransformations(
-		scaleXYZ,
-		XrotationDegrees,
-		YrotationDegrees,
-		ZrotationDegrees,
-		positionXYZ);
-
-	// set the active color values in the shader (RGBA)
-	SetShaderColor(1, 1, 1, 1);
-
-	m_basicMeshes->DrawBoxMesh();
-	/****************************************************************/
-
-	/*** Set needed transformations before drawing the basic mesh.  ***/
-	/*** This same ordering of code should be used for transforming ***/
-	/*** and drawing all the basic 3D shapes.						***/
-	/******************************************************************/
-	// set the XYZ scale for the mesh
-	scaleXYZ = glm::vec3(1.0f, 1.0f, 1.0f);
-
-	// set the XYZ rotation for the mesh
-	XrotationDegrees = 0.0f;
-	YrotationDegrees = 0.0f;
-	ZrotationDegrees = 0.0f;
-
-	// set the XYZ position for the mesh
-	positionXYZ = glm::vec3(3.2f, 5.6f, 2.5f);
-
-	// set the transformations into memory to be used on the drawn meshes
-	SetTransformations(
-		scaleXYZ,
-		XrotationDegrees,
-		YrotationDegrees,
-		ZrotationDegrees,
-		positionXYZ);
-
-	// set the active color values in the shader (RGBA)
-	SetShaderColor(1, 1, 1, 1);
-
-	m_basicMeshes->DrawSphereMesh();
-	/****************************************************************/
-
-	/*** Set needed transformations before drawing the basic mesh.  ***/
-	/*** This same ordering of code should be used for transforming ***/
-	/*** and drawing all the basic 3D shapes.						***/
-	/******************************************************************/
-	// set the XYZ scale for the mesh
-	scaleXYZ = glm::vec3(1.2f, 4.0f, 1.2f);
-
-	// set the XYZ rotation for the mesh
-	XrotationDegrees = 0.0f;
-	YrotationDegrees = 0.0f;
-	ZrotationDegrees = 5.0f;
-
-	// set the XYZ position for the mesh
-	positionXYZ = glm::vec3(-3.3f, 2.50f, 2.0f);
-
-	// set the transformations into memory to be used on the drawn meshes
-	SetTransformations(
-		scaleXYZ,
-		XrotationDegrees,
-		YrotationDegrees,
-		ZrotationDegrees,
-		positionXYZ);
-
-	// set the active color values in the shader (RGBA)
-	SetShaderColor(1, 1, 1, 1);
-
-	m_basicMeshes->DrawConeMesh();
-	/****************************************************************/
+    // --- Cone ---
+    SetTransformations(
+        glm::vec3(1.2f, 4.0f, 1.2f),
+        0.0f, 0.0f, 5.0f,
+        glm::vec3(-3.3f, 2.50f, 2.0f));
+    BindPBRMaterial("cone");
+    m_basicMeshes->DrawConeMesh();
 }
