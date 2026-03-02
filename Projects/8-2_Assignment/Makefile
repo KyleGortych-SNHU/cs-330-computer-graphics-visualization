@@ -3,98 +3,92 @@
 #  / /    \__ \______ /_ < /_ </ / / /
 # / /___ ___/ /_____/__/ /__/ / /_/ / 
 # \____//____/     /____/____/\____/  
-#                                     
-#     ___              _                                  __     _____
-#    /   |  __________(_)___ _____  ____ ___  ___  ____  / /_   |__  /
-#   / /| | / ___/ ___/ / __ `/ __ \/ __ `__ \/ _ \/ __ \/ __/    /_ < 
-#  / ___ |(__  |__  ) / /_/ / / / / / / / / /  __/ / / / /_    ___/ / 
+#     __  ___          __      __        ____ 
+#    /  |/  /___  ____/ /_  __/ /__     ( __ )
+#   / /|_/ / __ \/ __  / / / / / _ \   / __  |
+#  / /  / / /_/ / /_/ / /_/ / /  __/  / /_/ / 
+# /_/  /_/\____/\__,_/\__,_/_/\___/   \____/  
+# 
+# 2D Breakout Animation
+#
+# This project uses only GLFW and legacy OpenGL.
+# No GLEW, glad, glm, or custom shaders needed.
 #
 #  Maintainer: Kyle Gortych
-#  Date:
+#  Date: 3/1/2026
 
-# -------------------------
-# Auto-parallel setup (cross-platform)
-# -------------------------
-ifeq ($(OS),Windows_NT)
-  JOBS :=
-else
-  UNAME_S := $(shell uname -s)
-  ifeq ($(UNAME_S),Darwin)
-    JOBS := -j$(shell sysctl -n hw.ncpu)
-  else
-    JOBS := -j$(shell nproc)
-  endif
-endif
+# Compiler setup
+CXX      ?= g++
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2
 
-# -------------------------
-# Toolchain (inherited from root Makefile)
-# -------------------------
-CXX ?= g++
-RM  := rm -f
-MKDIR := mkdir -p
-
-# -------------------------
-# Output
-# -------------------------
-TARGET := Assignment8
-BUILD_DIR := build
-
-# -------------------------
 # Directories
-# -------------------------
-SRC_DIR := Source
-UTIL_DIR := ../../Utilities
-SHAPE_DIR := ../../3DShapes
+SRCDIR   := Source
+BUILDDIR := build
+BINDIR   := build
 
-# -------------------------
-# Source files
-# -------------------------
-SOURCES := \
-	$(SRC_DIR)/MainCode.cpp \
-	$(SRC_DIR)/SceneManager.cpp \
-	$(SRC_DIR)/ViewManager.cpp \
-	$(UTIL_DIR)/ShaderManager.cpp \
-	$(SHAPE_DIR)/ShapeMeshes.cpp
+# Source files and objects
+SRCS := $(SRCDIR)/MainCode.cpp \
+        $(SRCDIR)/Brick.cpp \
+        $(SRCDIR)/Circle.cpp \
+        $(SRCDIR)/Paddle.cpp \
+        $(SRCDIR)/Renderer.cpp \
+        $(SRCDIR)/GameState.cpp
 
-OBJECTS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
+OBJS := $(BUILDDIR)/MainCode.o \
+        $(BUILDDIR)/Brick.o \
+        $(BUILDDIR)/Circle.o \
+        $(BUILDDIR)/Paddle.o \
+        $(BUILDDIR)/Renderer.o \
+        $(BUILDDIR)/GameState.o
 
-# -------------------------
-# Compiler flags
-# -------------------------
-DEFINES  := -DGLM_ENABLE_EXPERIMENTAL
-INCLUDES := -I$(SRC_DIR) -I$(UTIL_DIR) -I$(SHAPE_DIR)
-CXXFLAGS := -std=c++17 -Wall -Wextra $(DEFINES) $(INCLUDES)
+# Output binary
+TARGET := $(BINDIR)/8-2_Assignment
 
-# -------------------------
-# Libraries (cross-platform)
-# -------------------------
-ifeq ($(OS),Windows_NT)
-	LDLIBS := -lglfw3dll -lglew32 -lopengl32
+# Platform detection and library flags
+UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
+
+ifeq ($(UNAME_S),Darwin)
+    # macOS — use framework OpenGL
+    LDFLAGS  := -lglfw -framework OpenGL -lm
+else ifeq ($(UNAME_S),Linux)
+    # Linux / NixOS
+    LDFLAGS  := -lglfw -lGL -lm
 else
-	UNAME_S := $(shell uname -s)
-	ifeq ($(UNAME_S),Darwin)
-		LDLIBS := -lglew -lglfw -framework OpenGL
-	else
-		LDLIBS := -lGLEW -lglfw -lGL
-	endif
+    # Windows (MSYS2 / MinGW)
+    LDFLAGS  := -lglfw3 -lopengl32 -lgdi32 -lm
 endif
 
-# -------------------------
+# pkg-config override for NixOS 
+PKG_CONFIG := $(shell command -v pkg-config 2>/dev/null)
+ifdef PKG_CONFIG
+    GLFW_CFLAGS  := $(shell pkg-config --cflags glfw3 2>/dev/null)
+    GLFW_LDFLAGS := $(shell pkg-config --libs   glfw3 2>/dev/null)
+    ifneq ($(GLFW_LDFLAGS),)
+        CXXFLAGS += $(GLFW_CFLAGS)
+        LDFLAGS   = $(GLFW_LDFLAGS) -lGL -lm
+    endif
+endif
+
 # Targets
-# -------------------------
-.PHONY: all clean
+.PHONY: all clean run
 
 all: $(TARGET)
 
-# Link the final executable
-$(TARGET): $(OBJECTS)
-	@$(CXX) $(OBJECTS) -o $@ $(LDLIBS)
+$(TARGET): $(OBJS) | $(BINDIR)
+	$(CXX) $(OBJS) -o $@ $(LDFLAGS)
+	@echo ""
+	@echo "Build complete: $(TARGET)"
+	@echo "Run with:  make run   or   ./$(TARGET)"
 
-# Compile each source into build folder
-$(BUILD_DIR)/%.o: %.cpp
-	@$(MKDIR) $(dir $@)
-	@$(CXX) $(CXXFLAGS) -c $< -o $@
+$(BUILDDIR)/%.o: $(SRCDIR)/%.cpp | $(BUILDDIR)
+	$(CXX) $(CXXFLAGS) -I$(SRCDIR) -c $< -o $@
 
-# Clean target
+$(BUILDDIR) $(BINDIR):
+	mkdir -p $@
+
 clean:
-	@$(RM) $(TARGET) $(OBJECTS)
+	rm -rf $(BUILDDIR)
+	@echo "Clean complete."
+
+run: $(TARGET)
+	./$(TARGET)

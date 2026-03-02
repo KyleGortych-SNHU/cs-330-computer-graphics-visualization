@@ -576,8 +576,7 @@ void SceneManager::PrepareScene(GLFWwindow* window)
     SetViewMatrix();
 }
 
-// =====================================================================
-//  RenderScene — 1950s American Diner
+//  RenderScene 1950s American Diner
 //
 //  Layout (top-down, camera at +Z looking toward -Z):
 //
@@ -586,8 +585,6 @@ void SceneManager::PrepareScene(GLFWwindow* window)
 //       Aisle:   X ~ 0 to 2.5 (rubber strip)
 //       Floor:   X ~ -10 to 10
 //       5 booths at Z = -8, -4, 0, 4, 8
-//
-// =====================================================================
 
 void SceneManager::RenderScene()
 {
@@ -597,9 +594,7 @@ void SceneManager::RenderScene()
 
     SetupLighting();
 
-    // =================================================================
-    // FLOOR — black & white checkerboard
-    // =================================================================
+    // FLOOR black & white checkerboard
     SetTransformations(
         glm::vec3(20.0f, 1.0f, 30.0f),
         0.0f, 0.0f, 0.0f,
@@ -610,9 +605,7 @@ void SceneManager::RenderScene()
         glm::vec3(0.06f, 0.06f, 0.06f));
     m_basicMeshes->DrawPlaneMesh();
 
-    // =================================================================
-    // RUBBER AISLE STRIP — center walkway (PBR rubber on top of floor)
-    // =================================================================
+    // RUBBER AISLE STRIP center walkway PBR rubber on top of floor
     SetTransformations(
         glm::vec3(3.0f, 0.02f, 30.0f),
         0.0f, 0.0f, 0.0f,

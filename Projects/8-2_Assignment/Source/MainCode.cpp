@@ -1,239 +1,182 @@
-#include <GLFW\glfw3.h>
-#include "linmath.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <conio.h>
+/* 
+ * MainCode.cpp
+ *
+ * Entry point for the 2D Breakout-style collision animation.
+ * This file contains only main() — all game logic, rendering, and state
+ * management are delegated to their respective modules:
+ *
+ *   Constants.h
+ *   Brick.h/.cpp
+ *   Circle.h/.cpp
+ *   Paddle.h/.cpp
+ *   Renderer.h/.cpp
+ *   GameState.h/.cpp
+ *
+ * Maintainer: Kyle Gortych
+ * Date: 3/1/2026
+ */
+
+#include <GLFW/glfw3.h>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
-#include <vector>
-#include <windows.h>
-#include <time.h>
 
-using namespace std;
-
-const float DEG2RAD = 3.14159 / 180;
-
-void processInput(GLFWwindow* window);
-
-enum BRICKTYPE { REFLECTIVE, DESTRUCTABLE };
-enum ONOFF { ON, OFF };
-
-class Brick
-{
-public:
-	float red, green, blue;
-	float x, y, width;
-	BRICKTYPE brick_type;
-	ONOFF onoff;
-
-	Brick(BRICKTYPE bt, float xx, float yy, float ww, float rr, float gg, float bb)
-	{
-		brick_type = bt; x = xx; y = yy, width = ww; red = rr, green = gg, blue = bb;
-		onoff = ON;
-	};
-
-	void drawBrick()
-	{
-		if (onoff == ON)
-		{
-			double halfside = width / 2;
-
-			glColor3d(red, green, blue);
-			glBegin(GL_POLYGON);
-
-			glVertex2d(x + halfside, y + halfside);
-			glVertex2d(x + halfside, y - halfside);
-			glVertex2d(x - halfside, y - halfside);
-			glVertex2d(x - halfside, y + halfside);
-
-			glEnd();
-		}
-	}
-};
-
-
-class Circle
-{
-public:
-	float red, green, blue;
-	float radius;
-	float x;
-	float y;
-	float speed = 0.03;
-	int direction; // 1=up 2=right 3=down 4=left 5 = up right   6 = up left  7 = down right  8= down left
-
-	Circle(double xx, double yy, double rr, int dir, float rad, float r, float g, float b)
-	{
-		x = xx;
-		y = yy;
-		radius = rr;
-		red = r;
-		green = g;
-		blue = b;
-		radius = rad;
-		direction = dir;
-	}
-
-	void CheckCollision(Brick* brk)
-	{
-		if (brk->brick_type == REFLECTIVE)
-		{
-			if ((x > brk->x - brk->width && x <= brk->x + brk->width) && (y > brk->y - brk->width && y <= brk->y + brk->width))
-			{
-				direction = GetRandomDirection();
-				x = x + 0.03;
-				y = y + 0.04;
-			}
-		}
-		else if (brk->brick_type == DESTRUCTABLE)
-		{
-			if ((x > brk->x - brk->width && x <= brk->x + brk->width) && (y > brk->y - brk->width && y <= brk->y + brk->width))
-			{
-				brk->onoff = OFF;
-			}
-		}
-	}
-
-	int GetRandomDirection()
-	{
-		return (rand() % 8) + 1;
-	}
-
-	void MoveOneStep()
-	{
-		if (direction == 1 || direction == 5 || direction == 6)  // up
-		{
-			if (y > -1 + radius)
-			{
-				y -= speed;
-			}
-			else
-			{
-				direction = GetRandomDirection();
-			}
-		}
-
-		if (direction == 2 || direction == 5 || direction == 7)  // right
-		{
-			if (x < 1 - radius)
-			{
-				x += speed;
-			}
-			else
-			{
-				direction = GetRandomDirection();
-			}
-		}
-
-		if (direction == 3 || direction == 7 || direction == 8)  // down
-		{
-			if (y < 1 - radius) {
-				y += speed;
-			}
-			else
-			{
-				direction = GetRandomDirection();
-			}
-		}
-
-		if (direction == 4 || direction == 6 || direction == 8)  // left
-		{
-			if (x > -1 + radius) {
-				x -= speed;
-			}
-			else
-			{
-				direction = GetRandomDirection();
-			}
-		}
-	}
-
-	void DrawCircle()
-	{
-		glColor3f(red, green, blue);
-		glBegin(GL_POLYGON);
-		for (int i = 0; i < 360; i++) {
-			float degInRad = i * DEG2RAD;
-			glVertex2f((cos(degInRad) * radius) + x, (sin(degInRad) * radius) + y);
-		}
-		glEnd();
-	}
-};
-
-
-vector<Circle> world;
-
+#include "Constants.h"
+#include "Brick.h"
+#include "Circle.h"
+#include "Paddle.h"
+#include "Renderer.h"
+#include "GameState.h"
 
 int main(void) {
-	srand(time(NULL));
+    srand(static_cast<unsigned>(time(NULL)));
 
-	if (!glfwInit()) {
-		exit(EXIT_FAILURE);
-	}
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-	GLFWwindow* window = glfwCreateWindow(480, 480, "8-2 Assignment", NULL, NULL);
-	if (!window) {
-		glfwTerminate();
-		exit(EXIT_FAILURE);
-	}
-	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1);
+    // Initialize GLFW 
+    if (!glfwInit()) {
+        std::cerr << "ERROR: Failed to initialize GLFW" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 
-	Brick brick(REFLECTIVE, 0.5, -0.33, 0.2, 1, 1, 0);
-	Brick brick2(DESTRUCTABLE, -0.5, 0.33, 0.2, 0, 1, 0);
-	Brick brick3(DESTRUCTABLE, -0.5, -0.33, 0.2, 0, 1, 1);
-	Brick brick4(REFLECTIVE, 0, 0, 0.2, 1, 0.5, 0.5);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-	while (!glfwWindowShouldClose(window)) {
-		//Setup View
-		float ratio;
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
-		ratio = width / (float)height;
-		glViewport(0, 0, width, height);
-		glClear(GL_COLOR_BUFFER_BIT);
+    GLFWwindow* window = glfwCreateWindow(
+        640, 640, "CS-330  |  8-2 Breakout Animation", NULL, NULL);
 
-		processInput(window);
+    if (!window) {
+        std::cerr << "ERROR: Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        exit(EXIT_FAILURE);
+    }
 
-		//Movement
-		for (int i = 0; i < world.size(); i++)
-		{
-			world[i].CheckCollision(&brick);
-			world[i].CheckCollision(&brick2);
-			world[i].CheckCollision(&brick3);
-			world[i].CheckCollision(&brick4);
-			world[i].MoveOneStep();
-			world[i].DrawCircle();
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1); // VSync
 
-		}
+    // Build initial game world
+    buildBrickLayout();
+    paddle = new Paddle(0.0f, -0.90f, 0.30f, 0.04f, 0.1f, 0.6f, 0.9f);
+    spawnBall(-0.10f, -0.50f);
+    spawnBall( 0.00f, -0.50f);
+    spawnBall( 0.10f, -0.50f);
 
-		brick.drawBrick();
-		brick2.drawBrick();
-		brick3.drawBrick();
-		brick4.drawBrick();
+    // Enable line smoothing 
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		glfwSwapBuffers(window);
-		glfwPollEvents();
-	}
+    // Main game loop 
+    while (!glfwWindowShouldClose(window)) {
+        // Viewport and clear 
+        int fbWidth, fbHeight;
+        glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+        glViewport(0, 0, fbWidth, fbHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
 
-	glfwDestroyWindow(window);
-	glfwTerminate;
-	exit(EXIT_SUCCESS);
-}
+        drawBackground();
+        processInput(window);
 
+        // Gameover screen 
+        if (gameOver) {
+            glColor3f(1.0f, 0.2f, 0.2f);
+            glLineWidth(3.0f);
+            drawText(-0.45f, 0.15f, 0.09f, "GAME OVER");
+            glColor3f(0.8f, 0.8f, 0.8f);
+            glLineWidth(1.5f);
+            drawText(-0.55f, -0.05f, 0.04f, "PRESS SPACE TO RESTART");
+            glLineWidth(1.0f);
 
-void processInput(GLFWwindow* window)
-{
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, true);
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+            continue;
+        }
 
-	if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-	{
-		double r, g, b;
-		r = rand() / 10000;
-		g = rand() / 10000;
-		b = rand() / 10000;
-		Circle B(0, 0, 02, 2, 0.05, r, g, b);
-		world.push_back(B);
-	}
+        // Win screen 
+        if (gameWon) {
+            glColor3f(0.2f, 1.0f, 0.3f);
+            glLineWidth(3.0f);
+            drawText(-0.35f, 0.15f, 0.09f, "YOU WIN");
+            glColor3f(0.8f, 0.8f, 0.8f);
+            glLineWidth(1.5f);
+            drawText(-0.55f, -0.05f, 0.04f, "PRESS SPACE TO RESTART");
+            glLineWidth(1.0f);
+
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+            continue;
+        }
+
+        // Ball vs Brick collisions
+        for (size_t i = 0; i < world.size(); i++) {
+            for (size_t b = 0; b < bricks.size(); b++) {
+                world[i].CheckBrickCollision(&bricks[b]);
+            }
+        }
+
+        // Ball vs Paddle collision 
+        for (size_t i = 0; i < world.size(); i++) {
+            paddle->CheckCollision(world[i]);
+        }
+
+        // Ball vs Ball collisions
+        static int circleCollisionCount = 0;
+        for (size_t i = 0; i < world.size(); i++) {
+            for (size_t j = i + 1; j < world.size(); j++) {
+                if (world[i].CheckCircleCollision(world[j])) {
+                    circleCollisionCount++;
+                    // Spawn a small bonus ball every 5 circle to circle collision
+                    if (circleCollisionCount % 5 == 0 && world.size() < 30) {
+                        float midX = (world[i].x + world[j].x) / 2.0f;
+                        float midY = (world[i].y + world[j].y) / 2.0f;
+                        float ang  = static_cast<float>(rand() % 360) * DEG2RAD;
+                        world.emplace_back(
+                            midX, midY, 0.015f, ang, 0.02f,
+                            0.9f, 0.9f, 0.2f);
+                    }
+                }
+            }
+        }
+
+        // Move and draw balls 
+        for (size_t i = 0; i < world.size(); i++) {
+            world[i].MoveOneStep();
+            world[i].DrawCircle();
+        }
+
+        // Remove fallen balls and check lives 
+        removeDeadBalls();
+
+        if (world.empty()) {
+            lives--;
+            if (lives <= 0) {
+                gameOver = true;
+            } else {
+                spawnBall(paddle->x - 0.10f, paddle->y + 0.10f);
+                spawnBall(paddle->x,         paddle->y + 0.10f);
+                spawnBall(paddle->x + 0.10f, paddle->y + 0.10f);
+            }
+        }
+
+        // Check win condition 
+        if (countActiveBricks() == 0) {
+            gameWon = true;
+        }
+
+        // Draw bricks, paddle, HUD
+        for (size_t b = 0; b < bricks.size(); b++) {
+            bricks[b].drawBrick();
+
+        paddle->Draw();
+        drawLivesIndicator(lives);
+
+        // Swap and poll 
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    // Cleanup
+    delete paddle;
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    exit(EXIT_SUCCESS);
 }
